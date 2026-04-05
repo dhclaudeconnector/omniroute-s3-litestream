@@ -22,5 +22,4 @@ Leader khi instance chính gặp sự cố.
 - **Failover**: Leader chết → Follower lên thay trong vòng ~60 giây
 
 ### Không cần thay đổi gì từ phía người dùng
-
 Toàn bộ quá trình là tự động. Cấu hình hiện tại không thay đổi.
