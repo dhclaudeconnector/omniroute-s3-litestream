@@ -69,7 +69,7 @@ services:
   # docker-compose.yml — cloudflared service
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-msi}-cloudflared
+    container_name: cloudflared
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
@@ -89,7 +89,7 @@ services:
   # ================================================================
   omniroute:
     image: diegosouzapw/omniroute:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-msi}-omniroute
+    container_name: omniroute
     restart: "no"   # ← elector controls this
     stop_grace_period: 40s
     env_file: .env
@@ -120,7 +120,7 @@ services:
   # ================================================================
   litestream:
     image: litestream/litestream:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-msi}-litestream
+    container_name: litestream
     restart: "no"   # ← elector controls this
     env_file: .env
     volumes:
@@ -148,7 +148,7 @@ services:
   # ================================================================
   dozzle:
     image: amir20/dozzle:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-msi}-dozzle
+    container_name: dozzle
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
