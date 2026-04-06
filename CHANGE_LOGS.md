@@ -1,5 +1,62 @@
 # Change Logs
 
+## [2026-04-06] fix: compose down/up + litestream S3 generation + DB verify before omniroute
+
+### Vấn đề đã fix
+
+#### Fix 1 — Khi leader mới lên thay: `docker compose down` trước khi start
+- **Trước**: elector dùng `docker start/stop` → container cũ vẫn còn, state không clean
+- **Sau**: elector dùng `docker compose stop + rm` (= down) rồi `docker compose up` mới
+- Kết quả: mỗi lần leader win election, tất cả managed containers được tạo mới hoàn toàn
+
+#### Fix 2 — Litestream tạo generation mới mỗi lần (mất dữ liệu/config)
+- **Root cause**: `litestream.yml` thiếu `https://` ở endpoint → `litestream snapshots` fail
+  - `2>/dev/null || echo ""` nuốt error → output rỗng → startup.sh nghĩ "không có snapshot"
+  - → start fresh → tạo generation mới → dữ liệu cũ không được dùng
+- **Fix A**: `litestream.yml`: endpoint `${SUPABASE_PROJECT_REF}.supabase.co/...` → `https://${SUPABASE_PROJECT_REF}.supabase.co/...`
+- **Fix B**: `startup.sh`: bỏ `2>/dev/null || echo ""` → capture stderr riêng
+  - Nếu `litestream snapshots` exit non-zero → **exit 1 (hard fail)**, không start fresh
+  - Chỉ start fresh khi command thành công (exit 0) nhưng output rỗng (truly no data)
+- **Fix C**: `litestream.yml`: xóa `path: storage` bị duplicate
+
+#### Fix 3 — Đảm bảo S3 sync xong trước khi omniroute start
+- **Trước**: `waitHealthy("litestream", 180)` chỉ check container health status
+- **Sau**: `waitLitestreamReady(180)` = healthy + `docker exec` verify DB file tồn tại và non-empty
+  - Nếu DB rỗng → warn nhưng tiếp tục (fresh install case)
+  - Nếu DB có data → xác nhận restore thành công trước khi start omniroute
+
+### services/elector/Dockerfile (MODIFIED)
+- Thêm `docker-cli-compose` package để enable `docker compose` subcommand
+
+### services/elector/elector.js (MODIFIED)
+- Thêm constant `COMPOSE_FILE = "/workspace/docker-compose.yml"` và `ENV_FILE`
+- Thêm `composeExec()` — wrapper cho `docker compose -f ... --env-file ... -p ...`
+- Thêm `composeStopRemove(service, graceSec)` — stop + rm một service
+- Thêm `composeDown(services[])` — stop + rm danh sách services theo thứ tự
+- Thêm `composeUp(service)` — `docker compose up -d <service>`
+- Thêm `waitLitestreamReady(timeoutSec)` — healthy + DB file verify
+- `onBecomeLeader`: composeDown → composeUp litestream → waitLitestreamReady → composeUp omniroute/cloudflared
+- `onFollowerRetire`: composeDown (stop+rm) thay vì svcStop
+- `leaderHealthCheck`: composeUp thay vì svcStart (recreate, không chỉ restart)
+- `shutdown`: composeDown thay vì svcStop
+- `main()` init: composeDown thay vì svcStop
+- Bump version string: v3 → v4
+
+### docker-compose.yml (MODIFIED)
+- Elector: thêm volume mount `${CUR_WORK_DIR:-.}:/workspace:ro`
+  - Cho phép elector chạy `docker compose -f /workspace/docker-compose.yml`
+  - `CUR_WORK_DIR` được set bởi detect-os.sh và ghi vào .env
+
+### litestream/litestream.yml (MODIFIED)
+- **CRITICAL FIX**: endpoint thêm `https://` prefix
+- Xóa `path: storage` bị duplicate (YAML duplicate key)
+
+### litestream/startup.sh (MODIFIED)
+- Thay `2>/dev/null || echo ""` bằng capture stderr vào temp file
+- Nếu `litestream snapshots` exit non-zero → exit 1 (hard fail, không start fresh)
+- Bỏ `-if-replica-exists` khỏi lệnh restore (đã verify trước đó, fail rõ ràng hơn)
+- Thêm cleanup `rm -f "${RESTORE_TMP}"` trong error path
+
 ## [2026-04-05] feat: multi-instance leader election + litestream restore hardening
 
 ### services/elector/ (NEW)

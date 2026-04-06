@@ -7,7 +7,7 @@
 #   omniroute   — chỉ chạy trên LEADER (elector kiểm soát)
 #   cloudflared — chỉ chạy trên LEADER (elector kiểm soát)
 #
-# Follower: tất cả managed services STOPPED
+# Follower: tất cả managed services STOPPED + REMOVED
 #   → Cloudflare Tunnel tự động skip instance không healthy
 #   → Zero-downtime failover khi leader chết
 #
@@ -29,8 +29,11 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-msi}-elector
     restart: unless-stopped   # elector TỰ restart nếu crash
     volumes:
-      # Cần Docker socket để start/stop các container khác
+      # Docker socket: để elector control các container khác
       - /var/run/docker.sock:/var/run/docker.sock
+      # Host workspace: để elector chạy `docker compose` với đúng compose file
+      # CUR_WORK_DIR được set bởi detect-os.sh và ghi vào .env
+      - ${CUR_WORK_DIR:-.}:/workspace:ro
     env_file: .env
     environment:
       # COMPOSE_PROJECT_NAME phải khớp với project name để tìm đúng container
@@ -81,7 +84,7 @@ services:
 
   # ================================================================
   #  OMNIROUTE — Managed by elector
-  #  Chỉ start sau khi litestream đã healthy (restore xong)
+  #  Chỉ start sau khi litestream đã healthy + DB verified (restore xong)
   # ================================================================
   omniroute:
     image: diegosouzapw/omniroute:latest
@@ -110,7 +113,7 @@ services:
   #  → elector đảm bảo điều này qua leader election
   #
   #  startup.sh flow:
-  #    1. Check S3 có snapshot không
+  #    1. Check S3 có snapshot không (hard fail nếu S3 error)
   #    2. Nếu có → restore (fail hard nếu error, không start với DB rỗng)
   #    3. exec litestream replicate
   # ================================================================
