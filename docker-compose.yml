@@ -99,7 +99,7 @@ services:
     ports:
       - "${OMNIROUTE_PORT:-20128}:${OMNIROUTE_PORT:-20128}"
     volumes:
-      - ./data:/app/data
+      - ${CUR_WORK_DIR:-.}/data:/app/data
     logging:
       driver: json-file
       options:
